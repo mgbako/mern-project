@@ -25,7 +25,7 @@ const UserSchema = new Schema({
   }
 });
 
-module.exports = User = mongoose.model("users", UserSchema);
+const User = (module.exports = mongoose.model("users", UserSchema));
 
 module.exports.getUserById = id => {
   return User.findById(id).exec();

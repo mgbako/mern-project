@@ -1,12 +1,14 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const gravatar = require("gravatar");
-const passport = require("passport");
 const jwt = require("jsonwebtoken");
-
+const passport = require("passport");
 const router = express.Router();
-const Users = require("../../models/User");
+const User = require("../../models/User");
 const secretKey = require("../../config/keys").secret;
+
+const validateRegisterInput = require("../../validations/register");
+const validateLoginInput = require("../../validations/login");
 
 /**
  * @route GET api/users/
@@ -25,11 +27,17 @@ router.get("/", (req, res) => {
  * @access Public
  */
 router.post("/register", (req, res) => {
-  Users.findOne({ email: req.body.email }).then(user => {
+  const { errors, isValid } = validateRegisterInput(req.body);
+
+  if (!isValid) {
+    res.status(400).json({
+      error: errors
+    });
+  }
+  User.findOne({ email: req.body.email }).then(user => {
     if (user) {
-      return res.status(400).json({
-        email: "Email already exists"
-      });
+      errors.email = "Email already exists";
+      return res.status(400).json(errors);
     } else {
       const avatar = gravatar.url(req.body.email, {
         s: "200",
@@ -43,7 +51,7 @@ router.post("/register", (req, res) => {
             error: err
           });
         }
-        const newUser = new Users({
+        const newUser = new User({
           name: req.body.name,
           email: req.body.email,
           avatar,
@@ -65,20 +73,28 @@ router.post("/register", (req, res) => {
  * @access Public
  */
 router.post("/signin", (req, res) => {
+  const { errors, isValid } = validateLoginInput(req.body);
+
+  if (!isValid) {
+    res.status(400).json({
+      error: errors
+    });
+  }
+
   const email = req.body.email;
   const password = req.body.password;
 
   User.getUserByEmail(email).then(user => {
     if (!user) {
-      res.json({
-        message: "User not found"
-      });
+      errors.email = "User not found";
+      res.json(errors);
     }
 
     User.comparePassword(password, user.password).then(isMatch => {
       console.log(isMatch);
       if (!isMatch) {
-        res.status(400).json({ message: "Wrong Password" });
+        errors.password = "Wrong Password";
+        res.status(400).json(errors);
       }
       const token = jwt.sign(user.toJSON(), secretKey, {
         expiresIn: 604800
@@ -96,5 +112,26 @@ router.post("/signin", (req, res) => {
     });
   });
 });
+
+/**
+ * @route POST api/users/current
+ * @desc Return current User
+ * @access Private
+ */
+
+router.get(
+  "/current",
+  passport.authenticate("jwt", { session: false }),
+  (req, res) => {
+    res.status(200).json({
+      user: {
+        id: req.user._id,
+        name: req.user.name,
+        email: req.user.email,
+        avatar: req.user.avatar
+      }
+    });
+  }
+);
 
 module.exports = router;
